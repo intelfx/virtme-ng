@@ -1140,7 +1140,7 @@ fn detach_from_terminal(tty_fd: libc::c_int) {
 
 // wait_for_child is used to wait for the shell command.
 #[allow(clippy::zombie_processes)]
-fn run_shell(tty_fd: libc::c_int, cmd: &str, args: &[&str]) {
+fn run_tty(tty_fd: libc::c_int, cmd: &str, args: &[&str]) {
     unsafe {
         let child = Command::new(cmd)
             .args(args)
@@ -1149,9 +1149,38 @@ fn run_shell(tty_fd: libc::c_int, cmd: &str, args: &[&str]) {
                 Ok(())
             })
             .spawn()
-            .expect("Failed to start shell session");
+            .expect("Failed to start session");
         wait_for_child(child.id() as i32);
     }
+}
+
+fn run_tty_user(
+    tty_fd: libc::c_int,
+    user: Option<&str>,
+    shell: Option<&str>,
+    script: Option<&str>,
+) {
+    let cmd;
+    let mut args = vec![];
+    if let Some(user) = user {
+        cmd = "su";
+        if env::var("virtme_login").is_ok() {
+            args.push("-l");
+        }
+        if let Some(shell) = shell {
+            args.extend_from_slice(&["-s", shell]);
+        }
+        args.push(user);
+    } else {
+        cmd = shell.unwrap_or_else(|| "/bin/sh");
+        if env::var("virtme_login").is_ok() {
+            args.push("-l");
+        }
+    }
+    if let Some(script) = script {
+        args.extend_from_slice(&["-c", script]);
+    }
+    run_tty(tty_fd, cmd, &args);
 }
 
 fn run_user_gui(tty_fd: libc::c_int) {
@@ -1177,23 +1206,21 @@ fn run_user_gui(tty_fd: libc::c_int) {
     }
 
     // Run graphical app using xinit directly
-    let mut args = vec!["-l", "-c"];
-    let storage;
-    if let Ok(user) = env::var("virtme_user") {
+    let user = env::var("virtme_user");
+    if let Ok(user) = &user {
         // Try to fix permissions on the virtual consoles, we are starting X
         // directly here so we may need extra permissions on the tty devices.
         utils::run_cmd("/bin/sh", &["-c", &format!("chown {user} /dev/char/*")]);
-
-        // Clean up any previous X11 state.
-        utils::run_cmd("/bin/sh", &["-c", "rm -f /tmp/.X11*/* /tmp/.X*-lock"]);
-
-        // Start xinit directly.
-        storage = format!("su -c 'xinit /run/tmp/.xinitrc' -- {user}");
-        args.push(&storage);
-    } else {
-        args.push("xinit /run/tmp/.xinitrc");
     }
-    run_shell(tty_fd, "/bin/sh", &args);
+    // Clean up any previous X11 state.
+    utils::run_cmd("/bin/sh", &["-c", &"rm -f /tmp/.X11*/* /tmp/.X*-lock"]);
+    // Start xinit directly.
+    run_tty_user(
+        tty_fd,
+        user.ok().as_deref(),
+        None,
+        Some("xinit /run/tmp/.xinitrc"),
+    );
 }
 
 fn init_xdg_runtime_dir(uid: u32) {
@@ -1206,21 +1233,11 @@ fn init_xdg_runtime_dir(uid: u32) {
 }
 
 fn run_user_shell(tty_fd: libc::c_int) {
-    let mut args = vec![];
-
-    // Check if a shell override is defined.
-    let shell = env::var("virtme_shell").unwrap_or_else(|_| String::new());
-    if !shell.is_empty() {
-        args.extend(["-s", &shell]);
-    }
-
-    let user = env::var("virtme_user").unwrap_or_else(|_| String::new());
-    if !user.is_empty() {
-        args.extend(["--", &user]);
-    }
+    let user = env::var("virtme_user");
+    let shell = env::var("virtme_shell");
 
     print_logo();
-    run_shell(tty_fd, "su", &args);
+    run_tty_user(tty_fd, user.ok().as_deref(), shell.ok().as_deref(), None);
 }
 
 fn run_user_session(consdev: &str) {

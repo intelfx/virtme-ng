@@ -338,6 +338,12 @@ virtme-ng is based on virtme, written by Andy Lutomirski <luto@kernel.org>.
     )
 
     parser.add_argument(
+        "--login",
+        action="store_true",
+        help="Launch a login shell in the guest (implies opposite of --pwd).",
+    )
+
+    parser.add_argument(
         "--rodir",
         action="append",
         default=[],
@@ -1062,7 +1068,11 @@ class KernelSource:
             self.virtme_param["no_root_posix_acl"] = ""
 
     def _get_virtme_cwd(self, args):
-        if args.cwd is not None:
+        if args.login:
+            if args.cwd is not None:
+                arg_fail("--cwd and --login are mutually exclusive")
+            self.virtme_param["cwd"] = "--login"
+        elif args.cwd is not None:
             self.virtme_param["cwd"] = "--cwd " + args.cwd
         elif args.root is None or args.ssh_client is not None:
             self.virtme_param["cwd"] = "--pwd"

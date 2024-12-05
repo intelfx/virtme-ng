@@ -417,6 +417,11 @@ def make_parser() -> "VirtmeArgumentParser":
     )
     g = g.add_mutually_exclusive_group()
     g.add_argument(
+        "--login",
+        action="store_true",
+        help="Start a login shell in the guest",
+    )
+    g.add_argument(
         "--pwd",
         action="store_true",
         help="Propagate current working directory to the guest",
@@ -2644,6 +2649,13 @@ def do_it() -> int:
             console_server(args, qemu, arch, qemuargs, kernelargs, virtiofs_state)
         elif args.server == "ssh":
             ssh_server(args, arch, qemuargs, kernelargs, guest_cache_dir)
+
+    if args.login:
+        if args.cwd is not None:
+            arg_fail("--cwd and --login are mutually exclusive")
+        if args.pwd:
+            arg_fail("--pwd and --login are mutually exclusive")
+        kernelargs.append("virtme_login=1")
 
     if args.pwd:
         rel_pwd = get_guest_relative_path(os.getcwd(), args.root)
