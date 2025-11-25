@@ -1413,44 +1413,48 @@ def console_client(args):
         socat_in = "-"
     socat_out = f"VSOCK-CONNECT:{args.port}:1024"
 
-    user = args.user if args.user else "${virtme_user:-root}"
-
     if args.shell is not None:
-        shell = f'-s "{args.shell}"'
+        shell = f"-s {shlex.quote(args.shell)}"
     else:
         shell = '${virtme_shell:+-s "${virtme_shell}"}'
 
     if args.pwd:
         cwd = os.path.relpath(os.getcwd(), args.root)
+        cwd = f"cd {shlex.quote(cwd)}"
     elif args.cwd is not None:
         cwd = os.path.relpath(args.cwd, args.root)
+        cwd = f"cd {shlex.quote(cwd)}"
     else:
-        cwd = '${virtme_chdir:+"${virtme_chdir}"}'
+        cwd = 'if [[ $virtme_chdir ]]; then cd "$virtme_chdir"; fi'
 
-    # use 'su' only if needed: another use, or to get a prompt
-    cmd = f'if [ "{user}" != "root" ]; then\n' + f'  exec su {shell} "{user}"'
-    if args.remote_cmd is not None:
-        exec_escaped = args.remote_cmd.replace('"', '\\"')
-        cmd += f' -c "{exec_escaped}"' + "\nelse\n" + f"  {args.remote_cmd}\n"
-    else:
-        cmd += "\nelse\n" + f"  exec su {shell}\n"
-    cmd += "fi"
+    # use a function to prevent issues when the script is concurrently modified and executed
+    # use 'su' only if needed: switch user or to get a prompt
+    cmd = (
+        """
+#!/bin/bash
+main() {
+"""
+        + f"""
+    local user={shlex.quote(args.user) if args.user else '"${virtme_user:-root}"'}
+    local cmd={shlex.quote(args.remote_cmd) if args.remote_cmd is not None else ""}
+    local login={"1" if args.login else ""}
+    local shell=({shell})
+    {stty}
+    {cwd}
+"""
+        + """
+    if [[ $user == root ]]; then
+        user=""
+    fi
+    exec su ${login:+"-l"} ${shell[@]} ${user:+"$user"} ${cmd:+-c "$cmd"}
+}
+main
+"""
+    )
 
     console_script_path = get_console_path(args.port)
     with open(console_script_path, "w", encoding="utf-8") as file:
-        print(
-            (
-                "#! /bin/bash\n"
-                "main() {\n"
-                f"{stty}\n"
-                f'HOME=$(getent passwd "{user}" | cut -d: -f6)\n'
-                f"cd {cwd}\n"
-                f"{cmd}\n"
-                "}\n"
-                "main"  # use a function to avoid issues when the script is modified
-            ),
-            file=file,
-        )
+        file.write(cmd)
     os.chmod(console_script_path, 0o755)
 
     if args.dry_run:
