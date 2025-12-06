@@ -37,6 +37,7 @@ from virtme_ng.utils import (
     VIRTME_SSH_DESTINATION_NAME,
     VIRTME_SSH_HOSTNAME_CID_SEPARATORS,
     get_conf,
+    scsi_device_id,
 )
 
 from .. import architectures, mkinitramfs, modfinder, qemu_helpers, resources, virtmods
@@ -1775,6 +1776,10 @@ def do_it() -> int:
             driveid = f"disk{i}"
             disk = DiskArg.parse("--disk", d)
 
+            # scsi-hd.device_id= is normally defaulted to scsi-hd.serial=,
+            # but it must not be longer than 20 characters
+            device_id = scsi_device_id(disk.name, 20)
+
             drive_opts = [
                 "if=none",
                 f"id={driveid}",
@@ -1786,6 +1791,7 @@ def do_it() -> int:
                 "vendor=virtme",
                 "product=disk",
                 f"serial={disk.name}",
+                f"device_id={device_id}" if device_id != disk.name else None,
             ]
 
             qemuargs.extend(
