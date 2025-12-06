@@ -2258,6 +2258,16 @@ def do_it() -> int:
                 ]
             )
 
+            # XXX DEBUG
+            print(
+                f"XXX: scsi disk id={i} arg={d}\n"
+                f"XXX:            parsed:          {disk}\n"
+                f"XXX:            -drive args:     {','.join(o for o in drive_opts if o is not None)}\n"
+                f"XXX:            -device args:    {','.join(o for o in device_opts if o is not None)}\n"
+                f"XXX:            unconsumed opts: {disk.opts}\n"
+            )
+            # XXX END DEBUG
+
             # any options that were not consumed are errors
             if disk.opts:
                 arg_fail(
@@ -2368,6 +2378,17 @@ def do_it() -> int:
                     ",".join(o for o in device_opts if o is not None),
                 ]
             )
+
+            # XXX DEBUG
+            print(
+                f"XXX: virtio disk id={i} arg={d}\n"
+                f"XXX:            parsed:          {disk}\n"
+                f"XXX:            -drive args:     {','.join(o for o in drive_opts if o is not None)}\n"
+                f"XXX:            -device args:    {','.join(o for o in device_opts if o is not None)}\n"
+                f"XXX:            scsi args:       {','.join(o for o in scsi_opts if o is not None)}\n"
+                f"XXX:            unconsumed opts: {disk.opts}\n"
+            )
+            # XXX END DEBUG
 
             # any options that were not consumed are errors
             if disk.opts:
